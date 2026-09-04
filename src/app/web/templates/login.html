@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Вход{% endblock %}
+{% block content %}
+<div class="max-w-sm mx-auto mt-24 bg-white border border-slate-300 p-6">
+  <h1 class="text-base font-semibold mb-4">Вход в панель</h1>
+  {% if error %}
+    <div class="mb-3 px-3 py-2 bg-rose-100 border border-rose-300 text-rose-900">{{ error }}</div>
+  {% endif %}
+  <form method="post" action="/login" class="space-y-3">
+    <label class="block">
+      <span class="text-slate-600">Логин</span>
+      <input name="login" required autofocus autocomplete="username"
+             class="mt-1 w-full border border-slate-300 px-2 py-1">
+    </label>
+    <label class="block">
+      <span class="text-slate-600">Пароль</span>
+      <input name="password" type="password" required autocomplete="current-password"
+             class="mt-1 w-full border border-slate-300 px-2 py-1">
+    </label>
+    <button class="w-full bg-slate-900 text-white py-1.5 hover:bg-slate-700">Войти</button>
+  </form>
+</div>
+{% endblock %}

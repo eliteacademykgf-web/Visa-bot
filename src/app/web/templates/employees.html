@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Сотрудники{% endblock %}
+{% block content %}
+<div class="grid lg:grid-cols-3 gap-4">
+  <section class="lg:col-span-2 bg-white border border-slate-300">
+    <h2 class="px-3 py-2 border-b border-slate-200 font-semibold">Сотрудники</h2>
+    {% for e in employees %}
+    <form method="post" action="/employees/{{ e.id }}"
+          class="p-3 border-b border-slate-100 grid grid-cols-2 md:grid-cols-6 gap-2 items-end
+                 {% if not e.is_active %}bg-slate-50 text-slate-500{% endif %}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label class="block md:col-span-2">
+        <span class="text-slate-600 text-[11px]">ФИО</span>
+        <input name="full_name" value="{{ e.full_name }}" class="mt-1 w-full border border-slate-300 px-2 py-1">
+      </label>
+      <label class="block">
+        <span class="text-slate-600 text-[11px]">Роль</span>
+        <select name="role" class="mt-1 w-full border border-slate-300 px-2 py-1">
+          {% for r in roles %}<option value="{{ r.value }}" {% if e.role == r %}selected{% endif %}>{{ r.value }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="block">
+        <span class="text-slate-600 text-[11px]">Telegram ID</span>
+        <input name="telegram_id" value="{{ e.telegram_id or '' }}" class="mt-1 w-full border border-slate-300 px-2 py-1">
+      </label>
+      <label class="block">
+        <span class="text-slate-600 text-[11px]">Логин в панель</span>
+        <input name="login" value="{{ e.login or '' }}" class="mt-1 w-full border border-slate-300 px-2 py-1">
+      </label>
+      <label class="block">
+        <span class="text-slate-600 text-[11px]">Новый пароль</span>
+        <input name="password" type="password" placeholder="не менять" class="mt-1 w-full border border-slate-300 px-2 py-1">
+      </label>
+      <label class="flex items-center gap-2 md:col-span-2">
+        <input type="checkbox" name="is_active" value="true" {% if e.is_active %}checked{% endif %}>
+        <span class="text-slate-600">Активен</span>
+      </label>
+      <div class="md:col-span-4 flex gap-2">
+        <button class="bg-slate-900 text-white px-4 py-1.5 hover:bg-slate-700">Сохранить</button>
+      </div>
+
+    </form>
+    {% endfor %}
+  </section>
+
+  <div class="space-y-4">
+    <section class="bg-white border border-slate-300">
+      <h2 class="px-3 py-2 border-b border-slate-200 font-semibold">Добавить сотрудника</h2>
+      <form method="post" action="/employees/create" class="p-3 space-y-2">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label class="block"><span class="text-slate-600 text-[11px]">ФИО</span>
+          <input name="full_name" required class="mt-1 w-full border border-slate-300 px-2 py-1"></label>
+        <label class="block"><span class="text-slate-600 text-[11px]">Роль</span>
+          <select name="role" class="mt-1 w-full border border-slate-300 px-2 py-1">
+            {% for r in roles %}<option value="{{ r.value }}">{{ r.value }}</option>{% endfor %}
+          </select></label>
+        <label class="block"><span class="text-slate-600 text-[11px]">Telegram ID</span>
+          <input name="telegram_id" class="mt-1 w-full border border-slate-300 px-2 py-1"></label>
+        <label class="block"><span class="text-slate-600 text-[11px]">Логин (необязательно)</span>
+          <input name="login" class="mt-1 w-full border border-slate-300 px-2 py-1"></label>
+        <label class="block"><span class="text-slate-600 text-[11px]">Пароль</span>
+          <input name="password" type="password" class="mt-1 w-full border border-slate-300 px-2 py-1"></label>
+        <button class="w-full bg-slate-900 text-white py-1.5 hover:bg-slate-700">Добавить</button>
+      </form>
+    </section>
+
+  </div>
+</div>
+{% endblock %}

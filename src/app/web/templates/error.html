@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Ошибка {{ code }}{% endblock %}
+{% block content %}
+<div class="max-w-md mx-auto mt-24 bg-white border border-slate-300 p-6">
+  <h1 class="text-base font-semibold mb-2">Ошибка {{ code }}</h1>
+  <p class="text-slate-600">{{ message }}</p>
+  <a href="/" class="inline-block mt-4 text-slate-900 underline">На дашборд</a>
+</div>
+{% endblock %}

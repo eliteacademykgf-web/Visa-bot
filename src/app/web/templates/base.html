@@ -1,0 +1,55 @@
+{# Базовый шаблон панели.
+   Интерфейс плотный и без украшений: это рабочий инструмент, приоритет —
+   читаемость таблиц и скорость, а не витрина. #}
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Дежурства{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@2.0.3"></script>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    table { font-variant-numeric: tabular-nums; }
+    .cell { font-size: 11px; }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-900 text-sm">
+{% if user is defined and user %}
+<nav class="bg-slate-900 text-slate-200 px-4 py-2 flex items-center gap-1 text-[13px]">
+  <span class="font-semibold mr-4 text-white">Мониторинг VFS</span>
+  {% set links = [
+    ('/', 'Дашборд'),
+    ('/journal', 'Журнал'),
+    ('/employees', 'Сотрудники'),
+    ('/cities', 'Города'),
+    ('/settings', 'Настройки'),
+  ] %}
+  {% for href, label in links %}
+    <a href="{{ href }}"
+       class="px-3 py-1 rounded {% if current_path == href %}bg-slate-700 text-white{% else %}hover:bg-slate-800{% endif %}">
+      {{ label }}
+    </a>
+  {% endfor %}
+  <span class="ml-auto text-slate-400">{{ user.full_name }} · {{ user.role }}</span>
+  <form method="post" action="/logout" class="ml-3">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button class="px-2 py-1 rounded hover:bg-slate-800 text-slate-400">выйти</button>
+  </form>
+</nav>
+{% endif %}
+
+<main class="p-4 max-w-[1600px] mx-auto">
+  {% if request.query_params.get('saved') %}
+    <div class="mb-3 px-3 py-2 bg-emerald-100 border border-emerald-300 text-emerald-900">Сохранено.</div>
+  {% endif %}
+  {% if request.query_params.get('error') %}
+    <div class="mb-3 px-3 py-2 bg-rose-100 border border-rose-300 text-rose-900">
+      Ошибка: {{ request.query_params.get('error') }}
+    </div>
+  {% endif %}
+  {% block content %}{% endblock %}
+</main>
+</body>
+</html>

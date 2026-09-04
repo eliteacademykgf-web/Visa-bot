@@ -1,0 +1,53 @@
+{
+  "_comment_1": "Селекторы формы входа сняты с живой страницы 30.07.2026 и заполнены. Шаги записи (start_booking .. calendar) без входа в аккаунт получить нельзя — их снимает ваша команда по протоколу docs/research-vfs.md.",
+  "_comment_2": "ЛОВУШКИ: на форме входа есть скрытые поля #username, #username1, #password1 с классом d-none. Их заполнение выдаёт автоматизацию. Работать только с #email и #password.",
+  "_comment_3": "Форма входа защищена Cloudflare Turnstile: кнопка отправки disabled, пока нет токена. Turnstile НЕ обходится (ТЗ §1, §20). Рабочая схема — разовый ручной вход и переиспользование сессии: python -m app.cli capture-session --label monitor-1",
+
+  "base_url": "https://visa.vfsglobal.com",
+  "login_url": "https://visa.vfsglobal.com/kaz/ru/ita/login",
+  "booking_url": "https://visa.vfsglobal.com/kaz/ru/ita/dashboard",
+
+  "login_username": {"action": "#email", "timeout_ms": 20000},
+  "login_password": {"action": "#password"},
+  "login_submit":   {"action": "button.btn-brand-orange:not([disabled])"},
+  "logged_in_marker": {"wait_for": "", "timeout_ms": 20000},
+
+  "start_booking":      {"wait_for": "", "action": ""},
+  "select_centre":      {"wait_for": "", "action": ""},
+  "select_category":    {"wait_for": "", "action": ""},
+  "select_subcategory": {"wait_for": "", "action": ""},
+  "applicants_input":   {"action": ""},
+
+  "calendar_container": {"wait_for": "", "timeout_ms": 25000},
+  "available_day":      {"action": ""},
+  "available_time":     {"action": ""},
+  "message_container":  {"wait_for": ""},
+
+  "dates_api_pattern": "",
+  "date_format": "%d-%m-%Y",
+
+  "signals": {
+    "no_slots": [
+      "no appointment slots are currently available",
+      "записей не найдено",
+      "нет доступных слотов"
+    ],
+    "auth_required": [
+      "session has expired",
+      "please log in",
+      "сессия истекла"
+    ],
+    "captcha": [
+      "verify you are human",
+      "recaptcha",
+      "turnstile",
+      "подтвердите, что вы не робот"
+    ],
+    "blocked": [
+      "access denied",
+      "too many requests",
+      "temporarily blocked",
+      "доступ запрещён"
+    ]
+  }
+}

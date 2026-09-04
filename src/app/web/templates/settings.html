@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Настройки{% endblock %}
+{% block content %}
+<div class="grid lg:grid-cols-2 gap-4">
+  <section class="bg-white border border-slate-300">
+    <h2 class="px-3 py-2 border-b border-slate-200 font-semibold">Настройки</h2>
+    {% if test_result %}
+    <div class="mx-3 mt-3 px-3 py-2 border
+      {% if test_result == '200' %}bg-emerald-100 border-emerald-300 text-emerald-900
+      {% else %}bg-amber-100 border-amber-300 text-amber-900{% endif %}">
+      Пробный вебхук: {{ test_result }}
+    </div>
+    {% endif %}
+    <form method="post" action="/settings/save" class="p-3 space-y-2">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      {% for s in settings %}
+      <label class="block">
+        <span class="text-slate-700">{{ s.key }}</span>
+        <span class="text-slate-500 text-[11px] block">{{ s.description or '' }}</span>
+        <input name="setting__{{ s.key }}"
+               value="{{ '' if s.value is none else s.value }}"
+               class="mt-1 w-full border border-slate-300 px-2 py-1 font-mono text-[12px]">
+      </label>
+      {% endfor %}
+      <button class="bg-slate-900 text-white px-4 py-1.5 hover:bg-slate-700">Сохранить</button>
+    </form>
+    <form method="post" action="/settings/test-webhook" class="px-3 pb-3">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="px-4 py-1.5 border border-slate-300 hover:bg-slate-50">Отправить пробный вебхук</button>
+      <span class="text-slate-500 text-[11px]">тело помечено test=true</span>
+    </form>
+  </section>
+
+  <div class="space-y-4">
+    <section class="bg-white border border-slate-300">
+      <h2 class="px-3 py-2 border-b border-slate-200 font-semibold">Сменить свой пароль</h2>
+      <form method="post" action="/settings/password" class="p-3 space-y-2">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label class="block"><span class="text-slate-600 text-[11px]">Текущий пароль</span>
+          <input name="current_password" type="password" required class="mt-1 w-full border border-slate-300 px-2 py-1"></label>
+        <label class="block"><span class="text-slate-600 text-[11px]">Новый пароль (от 10 символов)</span>
+          <input name="new_password" type="password" required class="mt-1 w-full border border-slate-300 px-2 py-1"></label>
+        <button class="bg-slate-900 text-white px-4 py-1.5 hover:bg-slate-700">Сменить</button>
+      </form>
+    </section>
+
+    <section class="bg-white border border-slate-300">
+      <h2 class="px-3 py-2 border-b border-slate-200 font-semibold">
+        Аудит-лог <span class="font-normal text-slate-500">— только чтение</span>
+      </h2>
+      <table class="w-full">
+        <thead class="bg-slate-50 text-slate-600 text-[11px] uppercase">
+          <tr>
+            <th class="text-left px-3 py-1">Когда (UTC)</th>
+            <th class="text-left px-3 py-1">Кто</th>
+            <th class="text-left px-3 py-1">Действие</th>
+            <th class="text-left px-3 py-1">Объект</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry, actor in audit %}
+          <tr class="border-t border-slate-100">
+            <td class="px-3 py-1 whitespace-nowrap">{{ entry.created_at.strftime('%d.%m %H:%M') }}</td>
+            <td class="px-3 py-1">{{ actor.full_name if actor else 'система' }}</td>
+            <td class="px-3 py-1 font-mono text-[11px]">{{ entry.action }}</td>
+            <td class="px-3 py-1 text-slate-500">{{ entry.entity }}{% if entry.entity_id %} #{{ entry.entity_id }}{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  </div>
+</div>
+{% endblock %}

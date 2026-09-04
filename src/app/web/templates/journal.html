@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Журнал проверок{% endblock %}
+{% block content %}
+<section class="bg-white border border-slate-300">
+  <h2 class="px-3 py-2 border-b border-slate-200 font-semibold">
+    Журнал проверок <span class="text-slate-500 font-normal">— найдено {{ total }}</span>
+  </h2>
+
+  <form method="get" class="p-3 flex flex-wrap gap-2 items-end border-b border-slate-200">
+    <label class="block">
+      <span class="text-slate-600 text-[11px]">Город</span>
+      <select name="city_id" class="mt-1 border border-slate-300 px-2 py-1">
+        <option value="">все</option>
+        {% for c in cities %}
+          <option value="{{ c.id }}" {% if selected.city_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="block">
+      <span class="text-slate-600 text-[11px]">Статус</span>
+      <select name="status" class="mt-1 border border-slate-300 px-2 py-1">
+        <option value="">любой</option>
+        {% for s in statuses %}
+          <option value="{{ s.value }}" {% if selected.status == s.value %}selected{% endif %}>{{ status_label(s) }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="block">
+      <span class="text-slate-600 text-[11px]">С</span>
+      <input type="date" name="date_from" value="{{ selected.date_from }}" class="mt-1 border border-slate-300 px-2 py-1">
+    </label>
+    <label class="block">
+      <span class="text-slate-600 text-[11px]">По</span>
+      <input type="date" name="date_to" value="{{ selected.date_to }}" class="mt-1 border border-slate-300 px-2 py-1">
+    </label>
+    <label class="flex items-center gap-1 pb-1">
+      <input type="checkbox" name="only_errors" value="true" {% if selected.only_errors %}checked{% endif %}>
+      <span class="text-slate-600">только ошибки</span>
+    </label>
+    <button class="bg-slate-900 text-white px-4 py-1.5 hover:bg-slate-700">Показать</button>
+    <a href="/journal" class="px-3 py-1.5 border border-slate-300 hover:bg-slate-50">Сбросить</a>
+    <span class="ml-auto">
+      <a href="/journal/export.csv?{{ query_string }}" class="px-3 py-1.5 border border-slate-300 hover:bg-slate-50">Выгрузить CSV</a>
+    </span>
+  </form>
+
+  <div class="overflow-x-auto">
+  <table class="w-full">
+    <thead class="bg-slate-50 text-slate-600 text-[11px] uppercase">
+      <tr>
+        <th class="text-left px-3 py-1">№</th>
+        <th class="text-left px-3 py-1">Время (местное)</th>
+        <th class="text-left px-3 py-1">Город</th>
+        <th class="text-left px-3 py-1">Заяв.</th>
+        <th class="text-left px-3 py-1">Статус</th>
+        <th class="text-left px-3 py-1">Ближайшая дата</th>
+        <th class="text-left px-3 py-1">Дат</th>
+        <th class="text-left px-3 py-1">Длит.</th>
+        <th class="text-left px-3 py-1">Артефакты</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for check, city, target in rows %}
+      <tr class="border-t border-slate-100 hover:bg-slate-50">
+        <td class="px-3 py-1">{{ check.id }}</td>
+        <td class="px-3 py-1 whitespace-nowrap">{{ check.started_at | in_city(city.timezone) }}</td>
+        <td class="px-3 py-1">{{ city.name }}</td>
+        <td class="px-3 py-1">{{ target.applicants }}</td>
+        <td class="px-3 py-1">
+          <span class="{% if check.status.is_error %}text-rose-700{% elif check.status.is_slot_present %}text-emerald-700 font-semibold{% endif %}">
+            {{ status_label(check.status) }}
+          </span>
+          {% if check.error_text %}
+            <div class="text-[11px] text-slate-500">{{ check.error_text[:120] }}</div>
+          {% elif check.site_message %}
+            <div class="text-[11px] text-slate-500">{{ check.site_message[:120] }}</div>
+          {% endif %}
+        </td>
+        <td class="px-3 py-1">
+          {% if check.nearest_date %}<b>{{ check.nearest_date.strftime('%d.%m.%Y') }}</b>{% else %}—{% endif %}
+        </td>
+        <td class="px-3 py-1 text-slate-500">{{ check.available_dates | length }}</td>
+        <td class="px-3 py-1 text-slate-500">{{ check.duration_ms or '—' }}</td>
+        <td class="px-3 py-1 text-[11px] text-slate-500">
+          {% if check.screenshot_path %}скрин{% endif %}
+          {% if check.html_path %}html{% endif %}
+          {% if not check.screenshot_path and not check.html_path %}—{% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="9" class="px-3 py-3 text-slate-500">Ничего не найдено.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+
+  {% if pages > 1 %}
+  <div class="px-3 py-2 border-t border-slate-200 flex gap-2 items-center">
+    {% if page > 1 %}<a class="px-2 py-1 border border-slate-300" href="?{{ query_string }}&page={{ page - 1 }}">←</a>{% endif %}
+    <span class="text-slate-500">страница {{ page }} из {{ pages }}</span>
+    {% if page < pages %}<a class="px-2 py-1 border border-slate-300" href="?{{ query_string }}&page={{ page + 1 }}">→</a>{% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endblock %}
