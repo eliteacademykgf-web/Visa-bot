@@ -17,3 +17,8 @@ htmlcov/
 artifacts/
 config/vfs_selectors.json
 profiles/
+.idea/
+
+# Локальные тестовые копии в корне (канонично — в vfs-monitor-client/)
+/cdp_monitor.py
+/monitor_config.json

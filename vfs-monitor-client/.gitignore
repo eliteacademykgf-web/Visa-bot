@@ -1,0 +1,6 @@
+# Секреты и локальное окружение — НИКОГДА не коммитить
+monitor_config.json
+chrome-profile/
+.venv/
+__pycache__/
+*.pyc
