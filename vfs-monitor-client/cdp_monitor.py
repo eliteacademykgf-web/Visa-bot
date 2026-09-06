@@ -197,6 +197,7 @@ async def main() -> None:
     need_login = False
     warned_error = 0
     last_login_prompt = 0.0
+    relogin_started = False  # была ли попытка входа в текущем эпизоде
 
     log(f"Монитор запущен. Целей: {len(targets)}. Подключаюсь к Chrome ({cdp_url})...")
     async with async_playwright() as pw:
@@ -260,6 +261,7 @@ async def main() -> None:
 
                 if need_login:
                     need_login = False
+                    relogin_started = False  # эпизод закрыт: вход состоялся
                     notify(token, chat_id, "✅ Сессия VFS снова активна, слежу за слотами дальше.")
 
                 if status == 409:
@@ -291,15 +293,25 @@ async def main() -> None:
             if login_problem:
                 now_mono = time.monotonic()
                 if not need_login:
-                    # Впервые заметили вылет: готовим предсказуемое состояние
-                    # (развернуть окно, вывести вперёд, открыть форму входа).
+                    # Новый эпизод потери сессии: готовим предсказуемое
+                    # состояние (развернуть окно, вывести вперёд, открыть форму).
                     need_login = True
                     last_login_prompt = 0.0
+                    relogin_started = False
                     await prepare_login_page(page, login)
-                    # Точка интеграции внешнего автологина (твой AHK) — это
-                    # твоя часть; здесь монитор его не вызывает.
 
                 ready = await login_ready(page)
+
+                # Момент, когда форма стала готова (login_ready: false -> true) —
+                # единая точка для внешней надстройки входа (твой AHK). Флаг ниже
+                # даёт РОВНО одну попытку за эпизод и НЕ сбрасывается при её
+                # неудаче: дальше добивает человек. Сам монитор ничего не жмёт.
+                if ready and not relogin_started:
+                    relogin_started = True
+                    log("форма входа готова (login_ready) — можно нажимать «Войти»")
+                    # >>> ТВОЯ ЧАСТЬ: здесь запусти relogin.ahk
+                    #     (subprocess.Popen([...])). Монитор намеренно не запускает.
+
                 if now_mono - last_login_prompt > LOGIN_PROMPT_EVERY:
                     if ready:
                         notify(
