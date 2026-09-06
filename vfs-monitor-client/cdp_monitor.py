@@ -26,6 +26,9 @@ from pathlib import Path
 
 CONFIG_PATH = Path(__file__).with_name("monitor_config.json")
 
+# Как часто повторять напоминание «нужен вход», пока сессия не поднята.
+LOGIN_PROMPT_EVERY = 300
+
 # JS выполняется в контексте страницы VFS. Токен читается из sessionStorage
 # здесь же и наружу не выходит — в Python возвращается только результат.
 CHECK_JS = r"""
@@ -131,6 +134,51 @@ async def find_vfs_page(context):
     return None
 
 
+# Готовность формы входа: кнопка «Войти» существует и НЕ заблокирована. VFS
+# держит её disabled, пока не заполнены поля и не пройден Turnstile, поэтому
+# активная кнопка — надёжный признак «можно входить» (лучше слепого таймера).
+READY_JS = r"""
+() => {
+  const onLogin = /\/login/i.test(location.href);
+  const btns = Array.from(document.querySelectorAll('button'));
+  const ready = btns.some(b => /войти|login|sign in/i.test(b.textContent || '') && !b.disabled);
+  return { on_login: onLogin, ready };
+}
+"""
+
+
+async def login_ready(page) -> bool:
+    """Готова ли форма входа к нажатию (кнопка активна)."""
+    try:
+        r = await page.evaluate(READY_JS)
+        return bool(r.get("ready"))
+    except Exception:
+        return False
+
+
+async def prepare_login_page(page, login_url: str) -> None:
+    """Привести окно в предсказуемое состояние: развернуть, вывести вперёд,
+    открыть форму входа. Работает и когда окно свёрнуто (через CDP), и не
+    зависит от координат экрана."""
+    try:
+        cdp = await page.context.new_cdp_session(page)
+        info = await cdp.send("Browser.getWindowForTarget")
+        wid = info.get("windowId")
+        if wid is not None:
+            # Развернуть, если свёрнуто (windowState=minimized -> normal).
+            await cdp.send(
+                "Browser.setWindowBounds",
+                {"windowId": wid, "bounds": {"windowState": "normal"}},
+            )
+    except Exception as exc:  # noqa: BLE001
+        log(f"развернуть окно не удалось: {exc}")
+    try:
+        await page.bring_to_front()
+        await page.goto(login_url, wait_until="domcontentloaded")
+    except Exception as exc:  # noqa: BLE001
+        log(f"открыть страницу входа не удалось: {exc}")
+
+
 async def main() -> None:
     from playwright.async_api import async_playwright
 
@@ -148,6 +196,7 @@ async def main() -> None:
     last_seen: dict[str, str] = {}
     need_login = False
     warned_error = 0
+    last_login_prompt = 0.0
 
     log(f"Монитор запущен. Целей: {len(targets)}. Подключаюсь к Chrome ({cdp_url})...")
     async with async_playwright() as pw:
@@ -240,22 +289,35 @@ async def main() -> None:
                 await asyncio.sleep(3)
 
             if login_problem:
+                now_mono = time.monotonic()
                 if not need_login:
+                    # Впервые заметили вылет: готовим предсказуемое состояние
+                    # (развернуть окно, вывести вперёд, открыть форму входа).
                     need_login = True
-                    # Готовим предсказуемое состояние: окно Chrome вперёд и
-                    # открытая страница входа (браузер обычно подставляет логин
-                    # и пароль сам). Дальше нужен вход.
-                    try:
-                        await page.bring_to_front()
-                        await page.goto(login, wait_until="domcontentloaded")
-                    except Exception as exc:  # noqa: BLE001
-                        log(f"открыть страницу входа не удалось: {exc}")
-                    notify(
-                        token, chat_id,
-                        "🔑 Сессия VFS истекла. Открыл страницу входа — нажми «Войти», "
-                        "и я сам продолжу.",
-                    )
-                await asyncio.sleep(45)
+                    last_login_prompt = 0.0
+                    await prepare_login_page(page, login)
+                    # Точка интеграции внешнего автологина (твой AHK) — это
+                    # твоя часть; здесь монитор его не вызывает.
+
+                ready = await login_ready(page)
+                if now_mono - last_login_prompt > LOGIN_PROMPT_EVERY:
+                    if ready:
+                        notify(
+                            token, chat_id,
+                            "🔑 Сессия VFS истекла. Форма входа открыта, кнопка «Войти» "
+                            "активна — нажми «Войти», и я сам продолжу.",
+                        )
+                    else:
+                        notify(
+                            token, chat_id,
+                            "🔑 Сессия VFS истекла. Открыл форму входа — дождись зелёной "
+                            "галочки Cloudflare и нажми «Войти».",
+                        )
+                    last_login_prompt = now_mono
+                # Пока не готова — проверяем часто, чтобы поймать момент; когда
+                # готова и ждём нажатия — реже. Застревания нет: цикл продолжает
+                # проверять и сам поймает успешный вход (сбросит need_login выше).
+                await asyncio.sleep(15 if not ready else 30)
                 continue
 
             pause = random.randint(imin, imax)
