@@ -18,7 +18,9 @@ import asyncio
 import json
 import random
 import re
+import sys
 import time
+import subprocess
 import urllib.parse
 import urllib.request
 from datetime import datetime
@@ -26,8 +28,10 @@ from pathlib import Path
 
 CONFIG_PATH = Path(__file__).with_name("monitor_config.json")
 
-# Как часто повторять напоминание «нужен вход», пока сессия не поднята.
-LOGIN_PROMPT_EVERY = 300
+# Через сколько секунд непрерывной потери сессии слать тревогу: значит
+# авто-вход не справился и нужен человек. Обычное истечение восстанавливается
+# за секунды — о нём не пишем вовсе.
+STUCK_ALERT_AFTER = 900
 
 # JS выполняется в контексте страницы VFS. Токен читается из sessionStorage
 # здесь же и наружу не выходит — в Python возвращается только результат.
@@ -99,6 +103,42 @@ def load_config() -> dict:
 
 def log(msg: str) -> None:
     print(f"{datetime.now().strftime('%H:%M:%S')}  {msg}", flush=True)
+
+
+def check_git_update() -> bool:
+    """`git pull --ff-only` в папке проекта. True — если подтянулись изменения
+    (нужен перезапуск). Всё тихо и защищённо: не git-клон / нет git / конфликт —
+    просто возвращаем False и продолжаем работать на текущем коде."""
+    repo = Path(__file__).resolve().parent
+    if not (repo / ".git").exists() and not (repo.parent / ".git").exists():
+        return False  # папку просто скопировали, не клонировали — обновлять нечем
+    try:
+        r = subprocess.run(
+            ["git", "pull", "--ff-only"],
+            cwd=str(repo), capture_output=True, text=True, timeout=120,
+        )
+    except Exception as exc:  # noqa: BLE001
+        log(f"автообновление: git недоступен ({exc})")
+        return False
+    out = (r.stdout + "\n" + r.stderr).strip()
+    if r.returncode != 0:
+        log(f"автообновление: git pull не удался: {out[:200]}")
+        return False
+    if not out or "up to date" in out.lower() or "актуальн" in out.lower():
+        return False
+    log(f"автообновление: подтянул изменения, перезапускаюсь.\n{out[:300]}")
+    return True
+
+
+# Код выхода, по которому 2-start-monitor.bat перезапускает монитор с новым кодом.
+UPDATE_EXIT_CODE = 42
+
+
+def restart_self() -> None:
+    """Выйти с особым кодом — обёртка (2-start-monitor.bat) перезапустит
+    монитор уже с обновлённым кодом. На Windows надёжнее, чем подмена процесса."""
+    log("перезапуск для применения обновления...")
+    sys.exit(UPDATE_EXIT_CODE)
 
 
 def notify(token: str, chat_id: int, text: str) -> None:
@@ -192,12 +232,14 @@ async def main() -> None:
     imin = int(cfg.get("interval_min_seconds", 180))
     imax = int(cfg.get("interval_max_seconds", 300))
     reload_every = int(cfg.get("reload_seconds", 600))
+    auto_update_hours = float(cfg.get("auto_update_hours", 0))  # 0 = не обновляться
 
     last_seen: dict[str, str] = {}
     need_login = False
     warned_error = 0
-    last_login_prompt = 0.0
     relogin_started = False  # была ли попытка входа в текущем эпизоде
+    login_since = 0.0        # когда начался текущий эпизод потери сессии
+    login_alerted = False    # слали ли уже тревогу «не могу восстановить»
 
     log(f"Монитор запущен. Целей: {len(targets)}. Подключаюсь к Chrome ({cdp_url})...")
     async with async_playwright() as pw:
@@ -214,8 +256,18 @@ async def main() -> None:
 
         notify(token, chat_id, "✅ Монитор VFS запущен, слежу за слотами.")
         last_reload = time.monotonic()
+        last_update = time.monotonic()
 
         while True:
+            # Самообновление: раз в auto_update_hours подтянуть код из git и,
+            # если что-то поменялось, перезапуститься (Chrome и сессия живут
+            # отдельно, переподключимся). Всё защищённо — при любой заминке
+            # просто продолжаем на текущем коде.
+            if auto_update_hours > 0 and time.monotonic() - last_update > auto_update_hours * 3600:
+                last_update = time.monotonic()
+                if check_git_update():
+                    restart_self()
+
             page = await find_vfs_page(context)
             if page is None:
                 log("Вкладка vfsglobal.com не найдена — жду.")
@@ -262,7 +314,11 @@ async def main() -> None:
                 if need_login:
                     need_login = False
                     relogin_started = False  # эпизод закрыт: вход состоялся
-                    notify(token, chat_id, "✅ Сессия VFS снова активна, слежу за слотами дальше.")
+                    # «Восстановлено» пишем ТОЛЬКО если до этого слали тревогу,
+                    # иначе штатное авто-восстановление проходит молча.
+                    if login_alerted:
+                        notify(token, chat_id, "✅ Сессия VFS восстановлена, слежу дальше.")
+                    login_alerted = False
 
                 if status == 409:
                     log(f"[{t['name']}] 409 Repeated Delay — слишком часто, жду.")
@@ -284,52 +340,68 @@ async def main() -> None:
                         last_seen[t["name"]] = date
                 else:
                     if prev:
-                        notify(token, chat_id, f"ℹ️ VFS · {t['name']}: слоты снова закончились.")
-                    log(f"[{t['name']}] слотов нет.")
+                        log(f"[{t['name']}] слоты закончились.")
+                    else:
+                        log(f"[{t['name']}] слотов нет.")
                     last_seen[t["name"]] = ""
 
                 await asyncio.sleep(3)
 
             if login_problem:
                 now_mono = time.monotonic()
+
                 if not need_login:
-                    # Новый эпизод потери сессии: готовим предсказуемое
-                    # состояние (развернуть окно, вывести вперёд, открыть форму).
+                    # Новый эпизод потери сессии: тихо готовим окно и форму,
+                    # авто-вход попробует сам. Пользователю НЕ пишем — обычное
+                    # истечение восстанавливается за секунды.
                     need_login = True
-                    last_login_prompt = 0.0
                     relogin_started = False
+                    login_since = now_mono
+                    login_alerted = False
+
                     await prepare_login_page(page, login)
 
+                # Проверяем, появилась ли активная кнопка «Войти».
                 ready = await login_ready(page)
 
-                # Момент, когда форма стала готова (login_ready: false -> true) —
-                # единая точка для внешней надстройки входа (твой AHK). Флаг ниже
-                # даёт РОВНО одну попытку за эпизод и НЕ сбрасывается при её
-                # неудаче: дальше добивает человек. Сам монитор ничего не жмёт.
+                # Если форма полностью готова — один раз запускаем AHK.
+                # После запуска relogin_started больше НЕ сбрасываем
+                # до восстановления сессии.
                 if ready and not relogin_started:
                     relogin_started = True
-                    log("форма входа готова (login_ready) — можно нажимать «Войти»")
-                    # >>> ТВОЯ ЧАСТЬ: здесь запусти relogin.ahk
-                    #     (subprocess.Popen([...])). Монитор намеренно не запускает.
 
-                if now_mono - last_login_prompt > LOGIN_PROMPT_EVERY:
-                    if ready:
-                        notify(
-                            token, chat_id,
-                            "🔑 Сессия VFS истекла. Форма входа открыта, кнопка «Войти» "
-                            "активна — нажми «Войти», и я сам продолжу.",
+                    log("форма входа готова (login_ready) — запускаю relogin.ahk")
+                    AUTOHOTKEY_EXE = str(Path(__file__).with_name("ahk") / "AutoHotkey.exe")
+                    RELOGIN_AHK = str(Path(__file__).with_name("relogin.ahk"))
+                    try:
+                        subprocess.Popen(
+                            [
+                                AUTOHOTKEY_EXE,
+                                RELOGIN_AHK,
+                            ],
+                            cwd=str(Path(RELOGIN_AHK).parent),
                         )
-                    else:
-                        notify(
-                            token, chat_id,
-                            "🔑 Сессия VFS истекла. Открыл форму входа — дождись зелёной "
-                            "галочки Cloudflare и нажми «Войти».",
-                        )
-                    last_login_prompt = now_mono
-                # Пока не готова — проверяем часто, чтобы поймать момент; когда
-                # готова и ждём нажатия — реже. Застревания нет: цикл продолжает
-                # проверять и сам поймает успешный вход (сбросит need_login выше).
-                await asyncio.sleep(15 if not ready else 30)
+
+                        log("relogin.ahk запущен — одна попытка на текущий эпизод")
+
+
+                    except Exception as exc:
+
+                        log(f"Не удалось запустить relogin.ahk: {exc}")
+
+                # Тревога только если авто-вход НЕ справился долго (нужен
+                # человек). Штатное восстановление проходит совсем без сообщений.
+                if now_mono - login_since > STUCK_ALERT_AFTER and not login_alerted:
+                    login_alerted = True
+                    mins = int((now_mono - login_since) // 60)
+                    notify(
+                        token,
+                        chat_id,
+                        f"🔴 Не удаётся восстановить сессию VFS уже {mins} мин. "
+                        f"Открой Chrome и нажми «Войти» вручную.",
+                    )
+
+                await asyncio.sleep(15)
                 continue
 
             pause = random.randint(imin, imax)

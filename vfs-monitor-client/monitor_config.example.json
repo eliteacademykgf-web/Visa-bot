@@ -1,5 +1,5 @@
 {
-  "_комментарий": "Скопируй этот файл в monitor_config.json и заполни. bot_token — от @BotFather. chat_id — id получателя (узнать через @userinfobot). targets — центр/категория заказчика (коды снимаются скриптом probe_codes.py).",
+  "_комментарий": "Скопируй в monitor_config.json и заполни. bot_token — от @BotFather. chat_id — куда слать: личке (число от @userinfobot) ИЛИ группе (ОТРИЦАТЕЛЬНОЕ число, напр. -1001234567890 — как получить, см. README). targets — центр/категория (коды снимает probe_codes.py).",
   "bot_token": "ВСТАВЬ_ТОКЕН_ОТ_BOTFATHER",
   "chat_id": 0,
   "cdp_url": "http://localhost:9222",
@@ -8,6 +8,7 @@
   "interval_min_seconds": 180,
   "interval_max_seconds": 300,
   "reload_seconds": 600,
+  "auto_update_hours": 8,
   "targets": [
     {"name": "Алматы · D Visa Study", "vacCode": "AKX", "visaCategoryCode": "EAV"}
   ]

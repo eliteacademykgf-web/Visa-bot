@@ -46,6 +46,32 @@ CONTEXT_OPTIONS: dict[str, Any] = {
     "viewport": {"width": 1440, "height": 900},
 }
 
+# Настоящий установленный Chrome вместо связанного с Playwright Chromium.
+# Akamai у VFS узнаёт Chromium под автоматизацией (navigator.webdriver,
+# --enable-automation) и отдаёт 403 {"code":"403201"} ещё до формы входа.
+# Turnstile по-прежнему проходит человек, IP не меняется, автовхода нет —
+# меняется только то, что браузер перестаёт объявлять себя автоматизацией.
+# Набор запуска един для capture-session, capture-selectors и воркера.
+BROWSER_CHANNEL = "chrome"
+LAUNCH_ARGS: list[str] = ["--disable-blink-features=AutomationControlled"]
+IGNORE_DEFAULT_ARGS: list[str] = ["--enable-automation"]
+
+
+async def launch_persistent(
+    playwright: Any, user_data_dir: Path, *, headless: bool
+) -> "BrowserContext":
+    """Открыть постоянный профиль в настоящем Chrome единым набором параметров."""
+    return cast(
+        "BrowserContext",
+        await playwright.chromium.launch_persistent_context(
+            str(user_data_dir),
+            headless=headless,
+            channel=BROWSER_CHANNEL,
+            args=LAUNCH_ARGS,
+            ignore_default_args=IGNORE_DEFAULT_ARGS,
+            **CONTEXT_OPTIONS,
+        ),
+    )
 
 def profile_dir(root: Path, label: str) -> Path:
     """Каталог профиля браузера для учётной записи.
@@ -618,11 +644,7 @@ async def open_context(
     с которыми сессию захватывали: подмен отпечатка здесь нет и не должно
     быть, но и расхождений быть не должно — они аннулируют clearance.
     """
-    context = await playwright.chromium.launch_persistent_context(
-        str(user_data_dir),
-        headless=headless,
-        **CONTEXT_OPTIONS,
-    )
+    context = await launch_persistent(playwright, user_data_dir, headless=headless)
     context.set_default_timeout(timeout_ms)
 
     # Разовый перенос сессии, захваченной до перехода на профили (или на

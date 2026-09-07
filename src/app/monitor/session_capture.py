@@ -110,13 +110,12 @@ async def _run_browser(
     """
     from playwright.async_api import async_playwright
 
-    from app.monitor.browser import CONTEXT_OPTIONS
+    from app.monitor.browser import launch_persistent
 
     async with async_playwright() as playwright:
         # headless=False обязательно: человек должен видеть окно и Turnstile.
-        context = await playwright.chromium.launch_persistent_context(
-            str(user_data_dir), headless=False, **CONTEXT_OPTIONS
-        )
+        context = await launch_persistent(playwright, user_data_dir, headless=False)
+
         page = context.pages[0] if context.pages else await context.new_page()
         try:
             await page.goto(login_url, wait_until="domcontentloaded")

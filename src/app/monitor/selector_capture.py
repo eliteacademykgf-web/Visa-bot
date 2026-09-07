@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING, Any
 from app.config import get_settings
 from app.domain.timeutils import utcnow
 from app.logging import get_logger
-from app.monitor.browser import CONTEXT_OPTIONS, profile_dir
+from app.monitor.browser import launch_persistent, profile_dir
 from app.monitor.selectors import load_selectors
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -96,9 +96,7 @@ async def _run(start_url: str, profile: Path, out_dir: Path) -> None:
 
     async with async_playwright() as playwright:
         # headless=False обязательно: сценарий проходит человек.
-        context = await playwright.chromium.launch_persistent_context(
-            str(profile), headless=False, **CONTEXT_OPTIONS
-        )
+        context = await launch_persistent(playwright, profile, headless=False)
         page = context.pages[0] if context.pages else await context.new_page()
 
         context.on("response", lambda response: _remember(response, network, pending))
