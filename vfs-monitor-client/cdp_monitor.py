@@ -219,6 +219,24 @@ async def prepare_login_page(page, login_url: str) -> None:
         log(f"открыть страницу входа не удалось: {exc}")
 
 
+async def minimize_window(page) -> None:
+    """Свернуть окно Chrome — вызывается сразу после успешного входа (первого
+    или после истечения сессии), чтобы окно не занимало экран. Развернёт его
+    обратно тот же prepare_login_page при следующем истечении сессии."""
+    try:
+        cdp = await page.context.new_cdp_session(page)
+        info = await cdp.send("Browser.getWindowForTarget")
+        wid = info.get("windowId")
+        if wid is not None:
+            await cdp.send(
+                "Browser.setWindowBounds",
+                {"windowId": wid, "bounds": {"windowState": "minimized"}},
+            )
+            log("окно свёрнуто после входа")
+    except Exception as exc:  # noqa: BLE001
+        log(f"свернуть окно не удалось: {exc}")
+
+
 async def main() -> None:
     from playwright.async_api import async_playwright
 
@@ -240,6 +258,11 @@ async def main() -> None:
     relogin_started = False  # была ли попытка входа в текущем эпизоде
     login_since = 0.0        # когда начался текущий эпизод потери сессии
     login_alerted = False    # слали ли уже тревогу «не могу восстановить»
+    # True — очередной успешный вход (первый при старте или после истечения
+    # сессии) должен свернуть окно. Взводится заново каждый раз, когда окно
+    # разворачивают под вход (prepare_login_page), и снимается сразу после
+    # первой же успешной проверки.
+    pending_minimize = True
 
     log(f"Монитор запущен. Целей: {len(targets)}. Подключаюсь к Chrome ({cdp_url})...")
     async with async_playwright() as pw:
@@ -320,6 +343,10 @@ async def main() -> None:
                         notify(token, chat_id, "✅ Сессия VFS восстановлена, слежу дальше.")
                     login_alerted = False
 
+                if pending_minimize:
+                    pending_minimize = False
+                    await minimize_window(page)
+
                 if status == 409:
                     log(f"[{t['name']}] 409 Repeated Delay — слишком часто, жду.")
                     continue
@@ -358,6 +385,7 @@ async def main() -> None:
                     relogin_started = False
                     login_since = now_mono
                     login_alerted = False
+                    pending_minimize = True  # окно развернули — свернём после входа
 
                     await prepare_login_page(page, login)
 
