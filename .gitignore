@@ -22,3 +22,6 @@ profiles/
 # Локальные тестовые копии в корне (канонично — в vfs-monitor-client/)
 /cdp_monitor.py
 /monitor_config.json
+
+# Архивы для передачи заказчику — содержат chrome-profile/.venv, в гит не идут
+*.zip

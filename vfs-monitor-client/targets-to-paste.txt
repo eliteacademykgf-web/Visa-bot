@@ -1,0 +1,7 @@
+Вставь этот блок вместо "targets": [ ... ] в monitor_config.json (замени старую строку с EAV/D Visa Study). Остальные поля (bot_token, chat_id и т.д.) не трогай. Потом этот файл удали и убери из git.
+
+  "targets": [
+    {"name": "Алматы · Long Stay · Student Enrollment (Kyrgyzstan citizens)", "vacCode": "AKX", "visaCategoryCode": "SEU"},
+    {"name": "Атырау · Long Stay · Student Enrollment (Kyrgyzstan citizens)", "vacCode": "GUW", "visaCategoryCode": "SEU"},
+    {"name": "Шымкент · Long Stay · Student Enrollment (Kyrgyzstan citizens)", "vacCode": "CIT", "visaCategoryCode": "SEU"}
+  ]
